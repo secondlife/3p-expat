@@ -44,7 +44,7 @@ pushd "$EXPAT_SOURCE_DIR"
                 -t:expat_static \
                 -p:Configuration=Release \
                 -p:Platform=$AUTOBUILD_WIN_VSPLATFORM \
-                -p:PlatformToolset=v143
+                -p:PlatformToolset="${AUTOBUILD_WIN_VSTOOLSET:-v143}"
 
             BASE_DIR="$STAGING_DIR/"
             mkdir -p "$BASE_DIR/lib/release"
