@@ -26,6 +26,9 @@ source_environment_tempfile="$STAGING_DIR/source_environment.sh"
 "$autobuild" source_environment > "$source_environment_tempfile"
 . "$source_environment_tempfile"
 
+# remove_cxxstd
+source "$(dirname "$AUTOBUILD_VARIABLES_FILE")/functions"
+
 EXPAT_SOURCE_DIR="$(pwd)/../expat"
 EXPAT_VERSION="$(sed -n -E "s/^ *PACKAGE_VERSION *= *'(.*)' *\$/\1/p" \
                      "$EXPAT_SOURCE_DIR/configure")"
@@ -57,9 +60,10 @@ pushd "$EXPAT_SOURCE_DIR"
         ;;
         darwin*)
             opts="-arch $AUTOBUILD_CONFIGURE_ARCH $LL_BUILD_RELEASE"
-            export CFLAGS="$opts"
+            plainopts="$(remove_cxxstd $opts)"
+            export CFLAGS="$plainopts"
             export CXXFLAGS="$opts"
-            export LDFLAGS="$opts"
+            export LDFLAGS="$plainopts"
             export CC="clang"
             export PREFIX="$STAGING_DIR"
             if ! ./configure --prefix=$PREFIX
@@ -91,7 +95,8 @@ pushd "$EXPAT_SOURCE_DIR"
         ;;
         linux*)
             PREFIX="$STAGING_DIR"
-            CFLAGS="-m$AUTOBUILD_ADDRSIZE $LL_BUILD_RELEASE" ./configure --prefix="$PREFIX" --libdir="$PREFIX/lib/release"
+            CFLAGS="-m$AUTOBUILD_ADDRSIZE $(remove_cxxstd $LL_BUILD_RELEASE)" \
+                  ./configure --prefix="$PREFIX" --libdir="$PREFIX/lib/release"
             make -j$(nproc)
             make install
 
