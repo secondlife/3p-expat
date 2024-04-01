@@ -1,11 +1,6 @@
 #!/usr/bin/env bash
 
-# turn on verbose debugging output for parabuild logs.
-exec 4>&1; export BASH_XTRACEFD=4; set -x
-# make errors fatal
-set -e
-# complain about undefined vars
-set -u
+set -eu
 
 if [ -z "$AUTOBUILD" ] ; then
     exit 1
@@ -17,46 +12,39 @@ else
     autobuild="$AUTOBUILD"
 fi
 
-top="$(dirname "$0")"
-
-STAGING_DIR="$(pwd)"
+top="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+stage="$top/stage"
+build="$top/build"
+src="$top/libexpat/expat"
 
 # load autbuild provided shell functions and variables
-source_environment_tempfile="$STAGING_DIR/source_environment.sh"
+source_environment_tempfile="$stage/source_environment.sh"
 "$autobuild" source_environment > "$source_environment_tempfile"
 . "$source_environment_tempfile"
 
 # remove_cxxstd
 source "$(dirname "$AUTOBUILD_VARIABLES_FILE")/functions"
 
-EXPAT_SOURCE_DIR="$(pwd)/../expat"
-EXPAT_VERSION="$(sed -n -E "s/^ *PACKAGE_VERSION *= *'(.*)' *\$/\1/p" \
-                     "$EXPAT_SOURCE_DIR/configure")"
+mkdir -p $top
+mkdir -p $build
+mkdir -p $stage/LICENSES
 
-build=${AUTOBUILD_BUILD_ID:=0}
-echo "${EXPAT_VERSION}.${build}" > "${STAGING_DIR}/VERSION.txt"
+cmake_flags="${CMAKE_FLAGS:--DEXPAT_SHARED_LIBS=OFF -DEXPAT_BUILD_EXAMPLES=OFF -DCMAKE_BUILD_TYPE=Release}"
 
-pushd "$EXPAT_SOURCE_DIR"
+pushd $build
     case "$AUTOBUILD_PLATFORM" in
         windows*)
             set +x
             load_vsvars
             set -x
 
-            msbuild.exe \
-                -t:expat_static \
-                -p:Configuration=Release \
-                -p:Platform=$AUTOBUILD_WIN_VSPLATFORM \
-                -p:PlatformToolset="${AUTOBUILD_WIN_VSTOOLSET:-v143}"
+            cmake $(cygpath -w $src) -G"NMake Makefiles" $cmake_flags -DCMAKE_INSTALL_PREFIX=$(cygpath -w $stage) -DEXPAT_MSVC_STATIC_CRT=ON
+            nmake
+            nmake test
+            nmake install
 
-            BASE_DIR="$STAGING_DIR/"
-            mkdir -p "$BASE_DIR/lib/release"
-            cp win32/bin/Release/libexpatMT.lib "$BASE_DIR/lib/release/"
-
-            INCLUDE_DIR="$STAGING_DIR/include/expat"
-            mkdir -p "$INCLUDE_DIR"
-            cp lib/expat.h "$INCLUDE_DIR"
-            cp lib/expat_external.h "$INCLUDE_DIR"
+            mkdir -p "$stage/lib/release"
+            mv $stage/lib/*.lib "$stage/lib/release/"
         ;;
         darwin*)
             opts="-arch $AUTOBUILD_CONFIGURE_ARCH $LL_BUILD_RELEASE"
@@ -65,47 +53,31 @@ pushd "$EXPAT_SOURCE_DIR"
             export CXXFLAGS="$opts"
             export LDFLAGS="$plainopts"
             export CC="clang"
-            export PREFIX="$STAGING_DIR"
-            if ! ./configure --prefix=$PREFIX
-            then
-                cat config.log >&2
-                exit 1
-            fi
-            make -j$(nproc)
+            export PREFIX="$stage"
+
+            cmake $src $cmake_flags -DCMAKE_INSTALL_PREFIX=$stage
+            make -j$AUTOBUILD_CPU_COUNT
+            make test
             make install
 
-            mv "$PREFIX/lib" "$PREFIX/release"
-            mkdir -p "$PREFIX/lib"
-            mv "$PREFIX/release" "$PREFIX/lib"
-            pushd "$PREFIX/lib/release"
-            fix_dylib_id "libexpat.dylib"
-
-            # CONFIG_FILE="$build_secrets_checkout/code-signing-osx/config.sh"
-            # if [ -f "$CONFIG_FILE" ]; then
-            #     source $CONFIG_FILE
-            #     codesign --force --timestamp --sign "$APPLE_SIGNATURE" "libexpat.dylib"
-            # else 
-            #     echo "No config file found; skipping codesign."
-            # fi
-            # popd
-
-            mv "$PREFIX/include" "$PREFIX/expat"
-            mkdir -p "$PREFIX/include"
-            mv "$PREFIX/expat" "$PREFIX/include"
+            mkdir -p "$stage/lib/release"
+            mv $stage/lib/*.a "$stage/lib/release/"
         ;;
         linux*)
-            PREFIX="$STAGING_DIR"
-            CFLAGS="-m$AUTOBUILD_ADDRSIZE $(remove_cxxstd $LL_BUILD_RELEASE)" \
-                  ./configure --prefix="$PREFIX" --libdir="$PREFIX/lib/release"
-            make -j$(nproc)
+            export CFLAGS=$(remove_cxxstd $LL_BUILD_RELEASE)
+            cmake $src $cmake_flags -DCMAKE_INSTALL_PREFIX=$stage
+            make -j$AUTOBUILD_CPU_COUNT
+            make test
             make install
 
-            mv "$PREFIX/include" "$PREFIX/expat"
-            mkdir -p "$PREFIX/include"
-            mv "$PREFIX/expat" "$PREFIX/include"
+            mkdir -p "$stage/lib/release"
+            mv $stage/lib/*.a "$stage/lib/release/"
         ;;
     esac
 
-    mkdir -p "$STAGING_DIR/LICENSES"
-    cp "$EXPAT_SOURCE_DIR/COPYING" "$STAGING_DIR/LICENSES/expat.txt"
 popd
+
+mkdir -p "$stage/LICENSES"
+mkdir -p "$stage/include/expat"
+mv $stage/include/*.h "$stage/include/expat/"
+cp "$src/COPYING" "$stage/LICENSES/expat.txt"
