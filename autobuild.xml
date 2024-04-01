@@ -62,7 +62,6 @@
           </map>
           <key>manifest</key>
           <array>
-            <string>lib/release/*.dylib</string>
             <string>lib/release/*.a</string>
           </array>
           <key>name</key>
@@ -86,8 +85,6 @@
           <key>manifest</key>
           <array>
             <string>lib/release/*.a</string>
-            <string>lib/release/*.so.*</string>
-            <string>lib/release/*.so</string>
           </array>
           <key>name</key>
           <string>linux</string>
@@ -115,8 +112,8 @@
           <string>windows</string>
         </map>
       </map>
-      <key>version_file</key>
-      <string>VERSION.txt</string>
+      <key>use_scm_version</key>
+      <boolean>true</boolean>
     </map>
     <key>type</key>
     <string>autobuild</string>
