@@ -53,6 +53,7 @@ pushd $build
             export CXXFLAGS="$opts"
             export LDFLAGS="$plainopts"
             export CC="clang"
+            export CXX="clang++"
             export PREFIX="$stage"
 
             cmake $src $cmake_flags -DCMAKE_INSTALL_PREFIX=$stage
