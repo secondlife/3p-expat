@@ -38,28 +38,20 @@ pushd $build
             load_vsvars
             set -x
 
-            cmake $(cygpath -w $src) -G"NMake Makefiles" $cmake_flags -DCMAKE_INSTALL_PREFIX=$(cygpath -w $stage) -DEXPAT_MSVC_STATIC_CRT=ON
-            nmake
-            nmake test
-            nmake install
+            cmake $(cygpath -w $src) -G"Visual Studio 17 2022" $cmake_flags \
+                -DCMAKE_INSTALL_PREFIX=$(cygpath -w $stage) \
+                -DEXPAT_MSVC_STATIC_CRT=ON
+            cmake --build .
+            cmake --build . --target install
 
             mkdir -p "$stage/lib/release"
             mv $stage/lib/*.lib "$stage/lib/release/"
         ;;
         darwin*)
-            opts="-arch $AUTOBUILD_CONFIGURE_ARCH $LL_BUILD_RELEASE"
-            plainopts="$(remove_cxxstd $opts)"
-            export CFLAGS="$plainopts"
-            export CXXFLAGS="$opts"
-            export LDFLAGS="$plainopts"
-            export CC="clang"
-            export CXX="clang++"
-            export PREFIX="$stage"
-
-            cmake $src $cmake_flags -DCMAKE_INSTALL_PREFIX=$stage
-            make -j$AUTOBUILD_CPU_COUNT
-            make test
-            make install
+            export CFLAGS=$(remove_cxxstd $LL_BUILD_RELEASE)
+            cmake $src -G"Xcode" $cmake_flags -DCMAKE_INSTALL_PREFIX=$stage
+            cmake --build .
+            cmake --build . --target install
 
             mkdir -p "$stage/lib/release"
             mv $stage/lib/*.a "$stage/lib/release/"
