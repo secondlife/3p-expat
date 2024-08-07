@@ -29,7 +29,7 @@ mkdir -p $top
 mkdir -p $build
 mkdir -p $stage/LICENSES
 
-cmake_flags="${CMAKE_FLAGS:--DEXPAT_SHARED_LIBS=OFF -DEXPAT_BUILD_EXAMPLES=OFF -DCMAKE_BUILD_TYPE=Release}"
+cmake_flags="${CMAKE_FLAGS:--DEXPAT_SHARED_LIBS=OFF -DEXPAT_BUILD_TOOLS=OFF -DEXPAT_BUILD_EXAMPLES=OFF -DCMAKE_BUILD_TYPE=Release}"
 
 pushd $build
     case "$AUTOBUILD_PLATFORM" in
@@ -38,38 +38,45 @@ pushd $build
             load_vsvars
             set -x
 
-            cmake $(cygpath -w $src) -G"NMake Makefiles" $cmake_flags -DCMAKE_INSTALL_PREFIX=$(cygpath -w $stage) -DEXPAT_MSVC_STATIC_CRT=ON
-            nmake
-            nmake test
-            nmake install
+            cmake $(cygpath -w $src) -G"Ninja Multi-Config" $cmake_flags -DCMAKE_INSTALL_PREFIX=$(cygpath -w $stage) -DEXPAT_MSVC_STATIC_CRT=OFF
+            cmake --build . --config Release
+            if [ "${DISABLE_UNIT_TESTS:-0}" = "0" ]; then
+                ctest -C Release
+            fi
+
+            cmake --install . --config Release
 
             mkdir -p "$stage/lib/release"
-            mv $stage/lib/*.lib "$stage/lib/release/"
+            mv $stage/lib/libexpatMD.lib "$stage/lib/release/libexpat.lib"
         ;;
         darwin*)
             opts="-arch $AUTOBUILD_CONFIGURE_ARCH $LL_BUILD_RELEASE"
             plainopts="$(remove_cxxstd $opts)"
-            export CFLAGS="$plainopts"
-            export CXXFLAGS="$opts"
-            export LDFLAGS="$plainopts"
-            export CC="clang"
-            export CXX="clang++"
-            export PREFIX="$stage"
 
-            cmake $src $cmake_flags -DCMAKE_INSTALL_PREFIX=$stage
-            make -j$AUTOBUILD_CPU_COUNT
-            make test
-            make install
+            export MACOSX_DEPLOYMENT_TARGET="$LL_BUILD_DARWIN_DEPLOY_TARGET"
+
+            cmake $src -G "Ninja Multi-Config" $cmake_flags -DCMAKE_INSTALL_PREFIX=$stage -DCMAKE_C_FLAGS="$plainopts" -DCMAKE_CXX_FLAGS="$opts" -DCMAKE_OSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET}
+            cmake --build . --config Release
+            if [ "${DISABLE_UNIT_TESTS:-0}" = "0" ]; then
+                ctest -C Release
+            fi
+
+            cmake --install . --config Release
 
             mkdir -p "$stage/lib/release"
             mv $stage/lib/*.a "$stage/lib/release/"
         ;;
         linux*)
-            export CFLAGS=$(remove_cxxstd $LL_BUILD_RELEASE)
-            cmake $src $cmake_flags -DCMAKE_INSTALL_PREFIX=$stage
-            make -j$AUTOBUILD_CPU_COUNT
-            make test
-            make install
+            opts="-m$AUTOBUILD_ADDRSIZE $LL_BUILD_RELEASE"
+            plainopts="$(remove_cxxstd $opts)"
+
+            cmake $src -G "Ninja" $cmake_flags -DCMAKE_INSTALL_PREFIX=$stage -DCMAKE_C_FLAGS="$plainopts" -DCMAKE_CXX_FLAGS="$opts" -DCMAKE_BUILD_TYPE=Release
+            cmake --build . --config Release
+            if [ "${DISABLE_UNIT_TESTS:-0}" = "0" ]; then
+                ctest -C Release
+            fi
+
+            cmake --install . --config Release
 
             mkdir -p "$stage/lib/release"
             mv $stage/lib/*.a "$stage/lib/release/"
