@@ -8,10 +8,12 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [windows-2022, macos-11, ubuntu-22.04]
+        os: [windows-2022, macos-12, ubuntu-22.04]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: secondlife/action-autobuild@v3
+      - uses: secondlife/action-autobuild@v4
+        with:
+          addrsize: ${{ matrix.addrsize }}
   release:
     needs: build
     runs-on: [ubuntu-latest]
