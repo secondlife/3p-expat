@@ -6,7 +6,7 @@ if [ -z "$AUTOBUILD" ] ; then
     exit 1
 fi
 
-if [ "$OSTYPE" = "cygwin" ] ; then
+if [[ "$OSTYPE" == "cygwin" || "$OSTYPE" == "msys" ]] ; then
     autobuild="$(cygpath -u $AUTOBUILD)"
 else
     autobuild="$AUTOBUILD"
@@ -38,7 +38,10 @@ pushd $build
             load_vsvars
             set -x
 
-            cmake $(cygpath -w $src) -G"Ninja Multi-Config" $cmake_flags -DCMAKE_INSTALL_PREFIX=$(cygpath -w $stage) -DEXPAT_MSVC_STATIC_CRT=OFF
+            opts="$(replace_switch /Zi /Z7 $LL_BUILD_RELEASE)"
+            plainopts="$(remove_switch /GR $(remove_cxxstd $opts))"
+
+            cmake $(cygpath -w $src) -G"Ninja Multi-Config" $cmake_flags -DCMAKE_INSTALL_PREFIX=$(cygpath -w $stage) -DCMAKE_C_FLAGS="$plainopts" -DCMAKE_CXX_FLAGS="$opts" -DEXPAT_MSVC_STATIC_CRT=OFF
             cmake --build . --config Release
             if [ "${DISABLE_UNIT_TESTS:-0}" = "0" ]; then
                 ctest -C Release
