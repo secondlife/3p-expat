@@ -42,9 +42,9 @@ pushd $build
             plainopts="$(remove_switch /GR $(remove_cxxstd $opts))"
 
             cmake $(cygpath -w $src) -G"Ninja Multi-Config" $cmake_flags -DCMAKE_INSTALL_PREFIX=$(cygpath -w $stage) -DCMAKE_C_FLAGS="$plainopts" -DCMAKE_CXX_FLAGS="$opts" -DEXPAT_MSVC_STATIC_CRT=OFF
-            cmake --build . --config Release
+            cmake --build . --config Release --parallel $AUTOBUILD_CPU_COUNT
             if [ "${DISABLE_UNIT_TESTS:-0}" = "0" ]; then
-                ctest -C Release
+                ctest -C Release --parallel $AUTOBUILD_CPU_COUNT
             fi
 
             cmake --install . --config Release
@@ -53,30 +53,48 @@ pushd $build
             mv $stage/lib/libexpatMD.lib "$stage/lib/release/libexpat.lib"
         ;;
         darwin*)
-            opts="-arch $AUTOBUILD_CONFIGURE_ARCH $LL_BUILD_RELEASE"
-            plainopts="$(remove_cxxstd $opts)"
-
             export MACOSX_DEPLOYMENT_TARGET="$LL_BUILD_DARWIN_DEPLOY_TARGET"
 
-            cmake $src -G "Ninja Multi-Config" $cmake_flags -DCMAKE_INSTALL_PREFIX=$stage -DCMAKE_C_FLAGS="$plainopts" -DCMAKE_CXX_FLAGS="$opts" -DCMAKE_OSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET}
-            cmake --build . --config Release
-            if [ "${DISABLE_UNIT_TESTS:-0}" = "0" ]; then
-                ctest -C Release
-            fi
+            for arch in x86_64 arm64 ; do
+                ARCH_ARGS="-arch $arch"
+                opts="${TARGET_OPTS:-$ARCH_ARGS $LL_BUILD_RELEASE}"
+                cc_opts="$(remove_cxxstd $opts)"
+                ld_opts="$ARCH_ARGS"
 
-            cmake --install . --config Release
+                mkdir -p "build_$arch"
+                pushd "build_$arch"
+                    CFLAGS="$cc_opts" \
+                    CXXFLAGS="$opts" \
+                    LDFLAGS="$ld_opts" \
+                    cmake $src -G "Ninja Multi-Config" $cmake_flags \
+                        -DCMAKE_C_FLAGS="$cc_opts" \
+                        -DCMAKE_CXX_FLAGS="$opts" \
+                        -DCMAKE_BUILD_TYPE=Release \
+                        -DCMAKE_INSTALL_PREFIX="$stage" \
+                        -DCMAKE_INSTALL_LIBDIR="$stage/lib/release/$arch" \
+                        -DCMAKE_OSX_ARCHITECTURES:STRING="$arch" \
+                        -DCMAKE_OSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET}
 
-            mkdir -p "$stage/lib/release"
-            mv $stage/lib/*.a "$stage/lib/release/"
+                    cmake --build . --config Release --parallel $AUTOBUILD_CPU_COUNT
+                    cmake --install . --config Release
+
+                    if [ "${DISABLE_UNIT_TESTS:-0}" = "0" ]; then
+                        ctest -C Release --parallel $AUTOBUILD_CPU_COUNT
+                    fi
+                popd
+            done
+
+            # Create universal library
+            lipo -create -output "$stage/lib/release/libexpat.a" "$stage/lib/release/x86_64/libexpat.a" "$stage/lib/release/arm64/libexpat.a"
         ;;
         linux*)
             opts="-m$AUTOBUILD_ADDRSIZE $LL_BUILD_RELEASE"
             plainopts="$(remove_cxxstd $opts)"
 
             cmake $src -G "Ninja" $cmake_flags -DCMAKE_INSTALL_PREFIX=$stage -DCMAKE_C_FLAGS="$plainopts" -DCMAKE_CXX_FLAGS="$opts" -DCMAKE_BUILD_TYPE=Release
-            cmake --build . --config Release
+            cmake --build . --config Release --parallel $AUTOBUILD_CPU_COUNT
             if [ "${DISABLE_UNIT_TESTS:-0}" = "0" ]; then
-                ctest -C Release
+                ctest -C Release --parallel $AUTOBUILD_CPU_COUNT
             fi
 
             cmake --install . --config Release
